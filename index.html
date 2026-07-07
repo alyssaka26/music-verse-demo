@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#05020d" />
+    <title>Music Verse — 360° Music Discovery</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="world" aria-label="360 degree music space"></canvas>
+
+      <div class="grain"></div>
+      <div class="vignette"></div>
+      <div class="warp" id="warp"></div>
+
+      <header class="topbar">
+        <button class="glass-button back-button" id="backButton" aria-label="Go back" disabled>
+          <span>←</span>
+        </button>
+        <div class="brand">
+          <span class="brand-dot"></span>
+          <span>MUSIC VERSE</span>
+        </div>
+        <button class="glass-button motion-button" id="motionButton" aria-label="Enable motion control">
+          <span class="motion-icon">◉</span>
+          <span class="motion-label">MOTION</span>
+        </button>
+      </header>
+
+      <div class="journey" id="journey">ORIGIN · 01</div>
+
+      <div class="target-copy" id="targetCopy">
+        <span class="target-kicker">RELATED SIGNAL</span>
+        <strong id="targetTitle">Look around</strong>
+        <span id="targetArtist">Hold your gaze to enter</span>
+      </div>
+
+      <div class="reticle" id="reticle" aria-hidden="true">
+        <svg viewBox="0 0 72 72">
+          <circle class="reticle-track" cx="36" cy="36" r="29"></circle>
+          <circle class="reticle-progress" cx="36" cy="36" r="29"></circle>
+        </svg>
+        <span class="reticle-core"></span>
+      </div>
+
+      <section class="now-playing" id="nowPlaying">
+        <div class="cover-mini-wrap">
+          <img id="nowCover" src="./covers/01-skate.jpg" alt="Current album cover" />
+          <span class="playing-bars"><i></i><i></i><i></i></span>
+        </div>
+        <div class="track-copy">
+          <span class="eyebrow">NOW IN THIS WORLD</span>
+          <strong id="nowTitle">Stir</strong>
+          <span id="nowArtist">Rylo Rodriguez</span>
+        </div>
+        <button class="pause-button" id="pauseButton" aria-label="Pause preview">Ⅱ</button>
+      </section>
+
+      <div class="hint" id="hint">DRAG TO LOOK · HOLD THE CENTER ON A COVER</div>
+
+      <section class="entry" id="entry">
+        <div class="entry-orb">
+          <span></span><span></span><span></span>
+          <div class="entry-cover"><img src="./covers/01-skate.jpg" alt="S.K.A.T.E. album cover" /></div>
+        </div>
+        <div class="entry-copy">
+          <span class="entry-index">A MUSIC DISCOVERY PROTOTYPE</span>
+          <h1>Every song<br />is a new world.</h1>
+          <p>Look around. Focus on a cover.<br />Travel through sound.</p>
+        </div>
+        <button class="enter-button" id="enterButton">
+          <span>ENTER THE VERSE</span>
+          <i>→</i>
+        </button>
+        <small>HEADPHONES RECOMMENDED · AUDIO PREVIEWS BY APPLE</small>
+      </section>
+
+      <div class="transition-copy" id="transitionCopy">
+        <span>ENTERING</span>
+        <strong></strong>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
