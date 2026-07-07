@@ -230,6 +230,11 @@ let targetPitch = 0;
 let pointerDown = false;
 let lastPointer = { x: 0, y: 0 };
 let deviceMotion = false;
+let motionBaseline = null;
+const MOTION_YAW_SENSITIVITY = .42;
+const MOTION_PITCH_SENSITIVITY = .34;
+const MOTION_SMOOTHING = .12;
+const MOTION_DEADZONE = .018;
 let journeyDepth = 1;
 let worldBuiltAt = performance.now();
 let themeInitialized = false;
@@ -717,13 +722,45 @@ function onPointerMove(event) {
 }
 function onPointerUp() { pointerDown = false; }
 
+function wrapRadians(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function applyMotionDeadzone(value) {
+  const magnitude = Math.abs(value);
+  if (magnitude < MOTION_DEADZONE) return 0;
+  return Math.sign(value) * (magnitude - MOTION_DEADZONE);
+}
+
 function onDeviceOrientation(event) {
   if (!deviceMotion || event.alpha == null) return;
   const orientation = screen.orientation?.angle || window.orientation || 0;
   const alpha = THREE.MathUtils.degToRad(event.alpha);
   const beta = THREE.MathUtils.degToRad(event.beta || 0);
-  targetYaw = -alpha + THREE.MathUtils.degToRad(orientation);
-  targetPitch = THREE.MathUtils.clamp(beta - Math.PI / 2, -1.2, 1.2);
+  const rawYaw = wrapRadians(-alpha + THREE.MathUtils.degToRad(orientation));
+  const rawPitch = THREE.MathUtils.clamp(beta - Math.PI / 2, -1.15, 1.15);
+
+  if (!motionBaseline) {
+    motionBaseline = {
+      yaw: rawYaw,
+      pitch: rawPitch,
+      targetYaw,
+      targetPitch,
+    };
+    return;
+  }
+
+  const yawDelta = applyMotionDeadzone(wrapRadians(rawYaw - motionBaseline.yaw));
+  const pitchDelta = applyMotionDeadzone(rawPitch - motionBaseline.pitch);
+  const desiredYaw = motionBaseline.targetYaw + yawDelta * MOTION_YAW_SENSITIVITY;
+  const desiredPitch = THREE.MathUtils.clamp(
+    motionBaseline.targetPitch + pitchDelta * MOTION_PITCH_SENSITIVITY,
+    -0.88,
+    0.88,
+  );
+  targetYaw += wrapRadians(desiredYaw - targetYaw) * MOTION_SMOOTHING;
+  targetPitch += (desiredPitch - targetPitch) * MOTION_SMOOTHING;
+  dwellStarted = performance.now();
 }
 
 async function enableMotion() {
@@ -733,10 +770,12 @@ async function enableMotion() {
       if (permission !== 'granted') return;
     }
     deviceMotion = !deviceMotion;
+    motionBaseline = null;
     ui.motionButton.classList.toggle('active', deviceMotion);
-    ui.motionButton.querySelector('.motion-label').textContent = deviceMotion ? 'ON' : 'MOTION';
+    ui.motionButton.querySelector('.motion-label').textContent = deviceMotion ? 'STEADY' : 'MOTION';
   } catch {
     deviceMotion = false;
+    motionBaseline = null;
   }
 }
 
