@@ -131,14 +131,14 @@ const history = [];
 const glitterStars = [];
 const glitterSize = { w: 0, h: 0, dpr: 1 };
 const glitterSettings = {
-  density: 42,
-  speed: .0024,
+  density: 34,
+  speed: .002,
   focalDepth: .16,
-  starScale: .62,
-  turbulence: .06,
-  glitter: .08,
-  brightness: .28,
-  trail: .22,
+  starScale: .46,
+  turbulence: .015,
+  glitter: .045,
+  brightness: .24,
+  trail: .08,
 };
 
 const auroraScene = new THREE.Scene();
@@ -458,7 +458,7 @@ function resetGlitterStar(star, initial = false, elapsed = 0) {
 
 function syncGlitterStarCount() {
   const area = window.innerWidth * window.innerHeight;
-  const target = Math.min(window.innerWidth < 700 ? 160 : 260, Math.max(96, Math.floor(area / 4200)));
+  const target = Math.min(window.innerWidth < 700 ? 72 : 108, Math.max(window.innerWidth < 700 ? 36 : 54, Math.floor(area / 12000)));
   if (glitterStars.length > target) {
     glitterStars.length = target;
     return;
@@ -557,13 +557,13 @@ function drawGlitterFrame(deltaSec, elapsed) {
     const maxR = 1 + glitterSettings.starScale * 2.3;
     const r = Math.min(baseR * flashMult, maxR);
     const lifeT = 1 - star.z;
-    const alpha = Math.min(1, lifeT * .88 + .045) * glitterSettings.brightness * (flashMult > 1 ? 1 : .82);
+    const alpha = Math.min(1, lifeT * .58 + .12) * glitterSettings.brightness * (flashMult > 1 ? 1 : .88);
     const colStr = rgbStrs[star.colorIdx];
 
     if (!Number.isNaN(star.px) && !Number.isNaN(star.py)) {
-      ctx.globalAlpha = alpha * .10;
+      ctx.globalAlpha = alpha * .04;
       ctx.strokeStyle = colStr;
-      ctx.lineWidth = Math.max(.25, r * .18);
+      ctx.lineWidth = Math.max(.2, r * .12);
       ctx.beginPath();
       ctx.moveTo(star.px, star.py);
       ctx.lineTo(sx, sy);
