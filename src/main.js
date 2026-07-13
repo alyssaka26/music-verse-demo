@@ -96,15 +96,17 @@ function createConstellationSlots(worldId) {
   return slots;
 }
 
+const glitterCanvas = document.querySelector('#glitter');
+const glitterContext = glitterCanvas.getContext('2d');
 const canvas = document.querySelector('#world');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 renderer.autoClear = false;
-renderer.setClearColor('#05020d', 1);
+renderer.setClearColor('#05020d', 0);
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2('#090316', 0.035);
@@ -126,6 +128,18 @@ const targetCardPosition = new THREE.Vector3();
 const targetCardScale = new THREE.Vector3();
 const cards = [];
 const history = [];
+const glitterStars = [];
+const glitterSize = { w: 0, h: 0, dpr: 1 };
+const glitterSettings = {
+  density: 78,
+  speed: .0042,
+  focalDepth: .13,
+  starScale: 2.1,
+  turbulence: .42,
+  glitter: .34,
+  brightness: .78,
+  trail: .92,
+};
 
 const auroraScene = new THREE.Scene();
 const auroraCamera = new THREE.Camera();
@@ -412,26 +426,170 @@ function createGlowTexture() {
   return new THREE.CanvasTexture(c);
 }
 
-function buildAtmosphere() {
-  const starCount = window.innerWidth < 600 ? 900 : 1500;
-  const positions = new Float32Array(starCount * 3);
-  const colors = new Float32Array(starCount * 3);
-  for (let i = 0; i < starCount; i++) {
-    const radius = 11 + Math.random() * 35;
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-    positions[i * 3 + 1] = radius * Math.cos(phi);
-    positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
-    const brightness = .45 + Math.random() * .55;
-    colors.set([brightness * .78, brightness * .64, brightness], i * 3);
+function makeGlitterStar() {
+  return {
+    x: 0,
+    y: 0,
+    z: 1,
+    px: NaN,
+    py: NaN,
+    seed: 0,
+    vmul: 1,
+    colorIdx: 0,
+    flashUntil: 0,
+    nextFlash: 0,
+  };
+}
+
+function resetGlitterStar(star, initial = false, elapsed = 0) {
+  const angle = Math.random() * Math.PI * 2;
+  const radius = (0.2 + Math.random() * 0.8) * (glitterSettings.density / 15);
+  star.x = Math.cos(angle) * radius;
+  star.y = Math.sin(angle) * radius;
+  star.z = initial ? Math.random() * (1 - glitterSettings.focalDepth) + glitterSettings.focalDepth : 1;
+  star.px = NaN;
+  star.py = NaN;
+  star.seed = Math.random() * 1000;
+  star.vmul = 0.62 + Math.random() * 0.76;
+  star.colorIdx = Math.floor(Math.random() * 3);
+  star.flashUntil = 0;
+  star.nextFlash = elapsed + 1 + Math.random() * 4 / Math.max(0.001, glitterSettings.glitter);
+}
+
+function syncGlitterStarCount() {
+  const area = window.innerWidth * window.innerHeight;
+  const target = Math.min(window.innerWidth < 700 ? 420 : 680, Math.max(320, Math.floor(area / 1700)));
+  if (glitterStars.length > target) {
+    glitterStars.length = target;
+    return;
   }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const points = new THREE.Points(geometry, new THREE.PointsMaterial({ size: .045, vertexColors: true, transparent: true, opacity: .8, sizeAttenuation: true }));
-  points.name = 'stars';
-  root.add(points);
+  while (glitterStars.length < target) {
+    const star = makeGlitterStar();
+    resetGlitterStar(star, true);
+    glitterStars.push(star);
+  }
+}
+
+function resizeGlitterCanvas() {
+  if (!glitterCanvas || !glitterContext) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, window.innerWidth);
+  const h = Math.max(1, window.innerHeight);
+  if (glitterSize.w === w && glitterSize.h === h && glitterSize.dpr === dpr) return;
+  glitterSize.w = w;
+  glitterSize.h = h;
+  glitterSize.dpr = dpr;
+  glitterCanvas.width = Math.floor(w * dpr);
+  glitterCanvas.height = Math.floor(h * dpr);
+  glitterCanvas.style.width = `${w}px`;
+  glitterCanvas.style.height = `${h}px`;
+  glitterContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+  glitterContext.clearRect(0, 0, w, h);
+  syncGlitterStarCount();
+}
+
+function glitterColorStrings() {
+  const white = 'rgb(255, 255, 255)';
+  const primary = auroraCurrentStops[1] || auroraCurrentStops[0];
+  const tertiary = auroraCurrentStops[2] || auroraCurrentStops[0];
+  return [
+    white,
+    `rgb(${Math.round(primary.r * 255)}, ${Math.round(primary.g * 255)}, ${Math.round(primary.b * 255)})`,
+    `rgb(${Math.round(tertiary.r * 255)}, ${Math.round(tertiary.g * 255)}, ${Math.round(tertiary.b * 255)})`,
+  ];
+}
+
+function drawGlitterFrame(deltaSec, elapsed) {
+  if (!glitterContext) return;
+  const { w, h } = glitterSize;
+  if (!w || !h) return;
+  syncGlitterStarCount();
+  const ctx = glitterContext;
+  const cx = w * .5;
+  const cy = h * .5;
+  const projScale = Math.min(w, h) * .9;
+  const dt = Math.max(0.001, Math.min(0.1, deltaSec)) * 60;
+  const keep = Math.pow(Math.min(.98, Math.max(0, glitterSettings.trail)), dt);
+  const trailAlpha = Math.max(.025, 1 - keep);
+  const rgbStrs = glitterColorStrings();
+
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'lighter';
+
+  for (let i = 0; i < glitterStars.length; i++) {
+    const star = glitterStars[i];
+    star.z -= glitterSettings.speed * star.vmul * dt;
+    if (star.z <= glitterSettings.focalDepth) {
+      resetGlitterStar(star, false, elapsed);
+      continue;
+    }
+
+    let tx = star.x;
+    let ty = star.y;
+    if (glitterSettings.turbulence > 0) {
+      const t = elapsed * 1.2 + star.seed;
+      const amp = glitterSettings.turbulence * (1 - star.z) * .25;
+      tx += Math.sin(t + star.seed) * amp;
+      ty += Math.cos(t * 1.13 + star.seed * .7) * amp;
+    }
+
+    const persp = glitterSettings.focalDepth / Math.max(star.z, .0001);
+    const sx = cx + tx * persp * projScale;
+    const sy = cy + ty * persp * projScale;
+    if (sx < -24 || sx > w + 24 || sy < -24 || sy > h + 24) {
+      resetGlitterStar(star, false, elapsed);
+      continue;
+    }
+
+    let flashMult = 1;
+    if (elapsed >= star.nextFlash && star.flashUntil < elapsed) {
+      star.flashUntil = elapsed + .04 + Math.random() * .07;
+      star.nextFlash = elapsed + 1 + Math.random() * 4 / Math.max(.001, glitterSettings.glitter);
+    }
+    if (elapsed <= star.flashUntil) flashMult = 1 + 2.5 * glitterSettings.glitter;
+
+    const sizePersp = Math.min(2.5, (glitterSettings.focalDepth / Math.max(star.z, .0001)) * .6);
+    const baseR = Math.max(.25, glitterSettings.starScale * (.4 + sizePersp));
+    const maxR = 1 + glitterSettings.starScale * 2.3;
+    const r = Math.min(baseR * flashMult, maxR);
+    const lifeT = 1 - star.z;
+    const alpha = Math.min(1, lifeT * .88 + .045) * glitterSettings.brightness * (flashMult > 1 ? 1 : .82);
+    const colStr = rgbStrs[star.colorIdx];
+
+    if (!Number.isNaN(star.px) && !Number.isNaN(star.py)) {
+      ctx.globalAlpha = alpha * .48;
+      ctx.strokeStyle = colStr;
+      ctx.lineWidth = Math.max(.4, r * .42);
+      ctx.beginPath();
+      ctx.moveTo(star.px, star.py);
+      ctx.lineTo(sx, sy);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = colStr;
+    ctx.fillRect(sx - r, sy - r, r * 2, r * 2);
+
+    if (flashMult > 1) {
+      const rf = Math.min(r * 1.45, maxR * 1.45);
+      ctx.globalAlpha = alpha * .42;
+      ctx.fillRect(sx - rf, sy - rf, rf * 2, rf * 2);
+    }
+
+    star.px = sx;
+    star.py = sy;
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function buildAtmosphere() {
+  resizeGlitterCanvas();
+  syncGlitterStarCount();
 
   const glowMap = createGlowTexture();
   for (let i = 0; i < 10; i++) {
@@ -556,7 +714,7 @@ function syncSceneAccent(stops) {
   document.documentElement.style.setProperty('--accent', `#${accent.getHexString()}`);
   document.documentElement.style.setProperty('--accent-rgb', colorToRgbString(accent));
   scene.fog.color.copy(accent).multiplyScalar(.085);
-  renderer.setClearColor(accent.clone().multiplyScalar(.025), 1);
+  renderer.setClearColor(accent.clone().multiplyScalar(.025), 0);
   root.children.filter((child) => child.name === 'nebula').forEach((sprite, index) => {
     sprite.material.color.copy(stops[index % stops.length]);
   });
@@ -577,7 +735,7 @@ function applyTheme(song) {
   document.documentElement.style.setProperty('--accent', song.accent);
   document.documentElement.style.setProperty('--accent-rgb', song.rgb);
   scene.fog.color.set(song.accent).multiplyScalar(.085);
-  renderer.setClearColor(new THREE.Color(song.accent).multiplyScalar(.025), 1);
+  renderer.setClearColor(new THREE.Color(song.accent).multiplyScalar(.025), 0);
   setAuroraPalette(song, !themeInitialized);
   themeInitialized = true;
 }
@@ -812,6 +970,7 @@ window.addEventListener('resize', () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
   renderer.setSize(window.innerWidth, window.innerHeight);
   auroraUniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+  resizeGlitterCanvas();
 });
 window.addEventListener('blur', () => { pointerDown = false; });
 
@@ -825,11 +984,12 @@ buildWorld(currentSong);
 applyTheme(currentSong);
 
 renderer.setAnimationLoop((time) => {
-  const elapsed = clock.getElapsedTime();
+  const delta = clock.getDelta();
+  const elapsed = clock.elapsedTime;
+  drawGlitterFrame(delta, elapsed);
   yaw += (targetYaw - yaw) * .075;
   pitch += (targetPitch - pitch) * .075;
   camera.rotation.set(pitch, yaw, 0, 'YXZ');
-  root.getObjectByName('stars').rotation.y = elapsed * .006;
   root.children.filter((child) => child.name === 'nebula').forEach((sprite) => {
     sprite.material.opacity = .08 + Math.sin(elapsed * .22 + sprite.userData.phase) * .025;
   });
