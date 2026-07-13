@@ -21,7 +21,7 @@ body { background: #05020d; }
 button { font: inherit; color: inherit; }
 
 #glitter, #world { position: fixed; inset: 0; width: 100%; height: 100%; }
-#glitter { z-index: 0; pointer-events: none; background: radial-gradient(circle at center, #080315 0%, #020006 72%); }
+#glitter { z-index: 0; pointer-events: none; background: radial-gradient(circle at center, #03040a 0%, #000104 76%); }
 #world { z-index: 1; touch-action: none; }
 
 .grain, .vignette, .warp { position: fixed; inset: 0; pointer-events: none; }

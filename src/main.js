@@ -131,14 +131,14 @@ const history = [];
 const glitterStars = [];
 const glitterSize = { w: 0, h: 0, dpr: 1 };
 const glitterSettings = {
-  density: 78,
-  speed: .0042,
-  focalDepth: .13,
-  starScale: 2.1,
-  turbulence: .42,
-  glitter: .34,
-  brightness: .78,
-  trail: .92,
+  density: 42,
+  speed: .0024,
+  focalDepth: .16,
+  starScale: .62,
+  turbulence: .06,
+  glitter: .08,
+  brightness: .28,
+  trail: .22,
 };
 
 const auroraScene = new THREE.Scene();
@@ -458,7 +458,7 @@ function resetGlitterStar(star, initial = false, elapsed = 0) {
 
 function syncGlitterStarCount() {
   const area = window.innerWidth * window.innerHeight;
-  const target = Math.min(window.innerWidth < 700 ? 420 : 680, Math.max(320, Math.floor(area / 1700)));
+  const target = Math.min(window.innerWidth < 700 ? 160 : 260, Math.max(96, Math.floor(area / 4200)));
   if (glitterStars.length > target) {
     glitterStars.length = target;
     return;
@@ -489,13 +489,14 @@ function resizeGlitterCanvas() {
 }
 
 function glitterColorStrings() {
-  const white = 'rgb(255, 255, 255)';
   const primary = auroraCurrentStops[1] || auroraCurrentStops[0];
   const tertiary = auroraCurrentStops[2] || auroraCurrentStops[0];
+  const tintA = primary.clone().lerp(new THREE.Color('#ffffff'), .82);
+  const tintB = tertiary.clone().lerp(new THREE.Color('#ffffff'), .78);
   return [
-    white,
-    `rgb(${Math.round(primary.r * 255)}, ${Math.round(primary.g * 255)}, ${Math.round(primary.b * 255)})`,
-    `rgb(${Math.round(tertiary.r * 255)}, ${Math.round(tertiary.g * 255)}, ${Math.round(tertiary.b * 255)})`,
+    'rgb(215, 222, 232)',
+    `rgb(${Math.round(tintA.r * 255)}, ${Math.round(tintA.g * 255)}, ${Math.round(tintA.b * 255)})`,
+    `rgb(${Math.round(tintB.r * 255)}, ${Math.round(tintB.g * 255)}, ${Math.round(tintB.b * 255)})`,
   ];
 }
 
@@ -560,9 +561,9 @@ function drawGlitterFrame(deltaSec, elapsed) {
     const colStr = rgbStrs[star.colorIdx];
 
     if (!Number.isNaN(star.px) && !Number.isNaN(star.py)) {
-      ctx.globalAlpha = alpha * .48;
+      ctx.globalAlpha = alpha * .10;
       ctx.strokeStyle = colStr;
-      ctx.lineWidth = Math.max(.4, r * .42);
+      ctx.lineWidth = Math.max(.25, r * .18);
       ctx.beginPath();
       ctx.moveTo(star.px, star.py);
       ctx.lineTo(sx, sy);
@@ -571,11 +572,12 @@ function drawGlitterFrame(deltaSec, elapsed) {
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = colStr;
-    ctx.fillRect(sx - r, sy - r, r * 2, r * 2);
+    const size = r * (star.z < .34 ? 1.65 : 1);
+    ctx.fillRect(sx - size, sy - size, size * 2, size * 2);
 
     if (flashMult > 1) {
-      const rf = Math.min(r * 1.45, maxR * 1.45);
-      ctx.globalAlpha = alpha * .42;
+      const rf = Math.min(r * 1.25, maxR * 1.25);
+      ctx.globalAlpha = alpha * .18;
       ctx.fillRect(sx - rf, sy - rf, rf * 2, rf * 2);
     }
 
