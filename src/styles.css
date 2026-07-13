@@ -21,7 +21,7 @@ body { background: #05020d; }
 button { font: inherit; color: inherit; }
 
 #glitter, #world { position: fixed; inset: 0; width: 100%; height: 100%; }
-#glitter { z-index: 0; pointer-events: none; background: radial-gradient(circle at center, #03040a 0%, #000104 76%); }
+#glitter { z-index: 2; pointer-events: none; background: transparent; mix-blend-mode: screen; }
 #world { z-index: 1; touch-action: none; }
 
 .grain, .vignette, .warp { position: fixed; inset: 0; pointer-events: none; }
@@ -29,7 +29,7 @@ button { font: inherit; color: inherit; }
   z-index: 3; opacity: .055; mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E");
 }
-.vignette { z-index: 2; background: radial-gradient(circle at center, transparent 35%, rgba(2,0,8,.25) 75%, rgba(2,0,8,.72) 115%); }
+.vignette { z-index: 3; background: radial-gradient(circle at center, transparent 35%, rgba(2,0,8,.25) 75%, rgba(2,0,8,.72) 115%); }
 .warp { z-index: 8; opacity: 0; background: radial-gradient(circle, transparent 0 4%, rgba(var(--accent-rgb),.12) 14%, rgba(2,0,8,.9) 72%); transform: scale(.2); }
 .warp.active { animation: warp 1.45s cubic-bezier(.65,0,.2,1) forwards; }
 @keyframes warp { 0%{opacity:0;transform:scale(.25)} 45%{opacity:1;transform:scale(3)} 70%{opacity:.95;transform:scale(8)} 100%{opacity:0;transform:scale(14)} }

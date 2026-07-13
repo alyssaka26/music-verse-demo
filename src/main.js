@@ -131,14 +131,14 @@ const history = [];
 const glitterStars = [];
 const glitterSize = { w: 0, h: 0, dpr: 1 };
 const glitterSettings = {
-  density: 34,
-  speed: .002,
-  focalDepth: .16,
-  starScale: .46,
-  turbulence: .015,
-  glitter: .045,
-  brightness: .24,
-  trail: .08,
+  density: 1.15,
+  speed: .0038,
+  focalDepth: .12,
+  starScale: .92,
+  turbulence: .035,
+  glitter: .58,
+  brightness: 1.06,
+  trail: .18,
 };
 
 const auroraScene = new THREE.Scene();
@@ -431,6 +431,9 @@ function makeGlitterStar() {
     x: 0,
     y: 0,
     z: 1,
+    size: 1,
+    alpha: 1,
+    depth: 1,
     px: NaN,
     py: NaN,
     seed: 0,
@@ -438,27 +441,44 @@ function makeGlitterStar() {
     colorIdx: 0,
     flashUntil: 0,
     nextFlash: 0,
+    twinkleSpeed: 1,
+    driftX: 0,
+    driftY: 0,
+    streak: 0,
   };
 }
 
 function resetGlitterStar(star, initial = false, elapsed = 0) {
   const angle = Math.random() * Math.PI * 2;
-  const radius = (0.2 + Math.random() * 0.8) * (glitterSettings.density / 15);
+  const radius = .68 + Math.pow(Math.random(), .62) * 1.32;
   star.x = Math.cos(angle) * radius;
   star.y = Math.sin(angle) * radius;
-  star.z = initial ? Math.random() * (1 - glitterSettings.focalDepth) + glitterSettings.focalDepth : 1;
+  star.z = initial
+    ? Math.random() * (1 - glitterSettings.focalDepth) + glitterSettings.focalDepth
+    : 1;
+  star.size = Math.random() < .2 ? 1.65 + Math.random() * 1.4 : .85 + Math.random() * 1.15;
+  star.alpha = .35 + Math.random() * .6;
+  star.depth = .55 + Math.random() * .9;
   star.px = NaN;
   star.py = NaN;
   star.seed = Math.random() * 1000;
-  star.vmul = 0.62 + Math.random() * 0.76;
-  star.colorIdx = Math.floor(Math.random() * 3);
+  star.vmul = .55 + Math.random() * 1.25;
+  star.colorIdx = Math.random() < .72 ? 0 : Math.floor(Math.random() * 2) + 1;
   star.flashUntil = 0;
-  star.nextFlash = elapsed + 1 + Math.random() * 4 / Math.max(0.001, glitterSettings.glitter);
+  star.nextFlash = elapsed + .45 + Math.random() * 2.8 / Math.max(0.001, glitterSettings.glitter);
+  star.twinkleSpeed = .7 + Math.random() * 1.8;
+  star.driftX = (Math.random() - .5) * .009;
+  star.driftY = (Math.random() - .5) * .009;
+  star.streak = Math.random() < .22 ? .75 + Math.random() * 2.2 : 0;
 }
 
 function syncGlitterStarCount() {
   const area = window.innerWidth * window.innerHeight;
-  const target = Math.min(window.innerWidth < 700 ? 72 : 108, Math.max(window.innerWidth < 700 ? 36 : 54, Math.floor(area / 12000)));
+  const mobile = window.innerWidth < 700;
+  const target = Math.min(
+    mobile ? 260 : 520,
+    Math.max(mobile ? 150 : 280, Math.round(Math.floor(area / (mobile ? 3000 : 4200)) * glitterSettings.density))
+  );
   if (glitterStars.length > target) {
     glitterStars.length = target;
     return;
@@ -508,81 +528,79 @@ function drawGlitterFrame(deltaSec, elapsed) {
   const ctx = glitterContext;
   const cx = w * .5;
   const cy = h * .5;
-  const projScale = Math.min(w, h) * .9;
+  const projScale = Math.min(w, h) * .58;
   const dt = Math.max(0.001, Math.min(0.1, deltaSec)) * 60;
-  const keep = Math.pow(Math.min(.98, Math.max(0, glitterSettings.trail)), dt);
-  const trailAlpha = Math.max(.025, 1 - keep);
   const rgbStrs = glitterColorStrings();
+  const audioLift = entered && !isPaused ? 1.08 : .92;
 
   ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`;
-  ctx.fillRect(0, 0, w, h);
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, w, h);
 
   for (let i = 0; i < glitterStars.length; i++) {
     const star = glitterStars[i];
+    const previousPersp = glitterSettings.focalDepth / Math.max(star.z, .0001);
+    star.px = cx + star.x * previousPersp * projScale;
+    star.py = cy + star.y * previousPersp * projScale;
     star.z -= glitterSettings.speed * star.vmul * dt;
+    star.x += (star.driftX + Math.sin(elapsed * .34 + star.seed) * glitterSettings.turbulence * .008) * dt;
+    star.y += (star.driftY + Math.cos(elapsed * .31 + star.seed) * glitterSettings.turbulence * .008) * dt;
     if (star.z <= glitterSettings.focalDepth) {
       resetGlitterStar(star, false, elapsed);
       continue;
     }
 
-    let tx = star.x;
-    let ty = star.y;
-    if (glitterSettings.turbulence > 0) {
-      const t = elapsed * 1.2 + star.seed;
-      const amp = glitterSettings.turbulence * (1 - star.z) * .25;
-      tx += Math.sin(t + star.seed) * amp;
-      ty += Math.cos(t * 1.13 + star.seed * .7) * amp;
-    }
-
     const persp = glitterSettings.focalDepth / Math.max(star.z, .0001);
-    const sx = cx + tx * persp * projScale;
-    const sy = cy + ty * persp * projScale;
-    if (sx < -24 || sx > w + 24 || sy < -24 || sy > h + 24) {
+    const sx = cx + star.x * persp * projScale;
+    const sy = cy + star.y * persp * projScale;
+    if (sx < -44 || sx > w + 44 || sy < -44 || sy > h + 44) {
       resetGlitterStar(star, false, elapsed);
       continue;
     }
+    const distanceFromCenter = Math.hypot(sx - cx, sy - cy);
+    const centerFade = THREE.MathUtils.clamp((distanceFromCenter - Math.min(w, h) * .12) / (Math.min(w, h) * .18), .08, 1);
 
     let flashMult = 1;
     if (elapsed >= star.nextFlash && star.flashUntil < elapsed) {
-      star.flashUntil = elapsed + .04 + Math.random() * .07;
-      star.nextFlash = elapsed + 1 + Math.random() * 4 / Math.max(.001, glitterSettings.glitter);
+      star.flashUntil = elapsed + .07 + Math.random() * .12;
+      star.nextFlash = elapsed + .5 + Math.random() * 3.2 / Math.max(.001, glitterSettings.glitter);
     }
-    if (elapsed <= star.flashUntil) flashMult = 1 + 2.5 * glitterSettings.glitter;
+    if (elapsed <= star.flashUntil) flashMult = 1.9 + 1.6 * glitterSettings.glitter;
 
-    const sizePersp = Math.min(2.5, (glitterSettings.focalDepth / Math.max(star.z, .0001)) * .6);
-    const baseR = Math.max(.25, glitterSettings.starScale * (.4 + sizePersp));
-    const maxR = 1 + glitterSettings.starScale * 2.3;
-    const r = Math.min(baseR * flashMult, maxR);
-    const lifeT = 1 - star.z;
-    const alpha = Math.min(1, lifeT * .58 + .12) * glitterSettings.brightness * (flashMult > 1 ? 1 : .88);
+    const twinkle = .58 + Math.pow(Math.sin(elapsed * star.twinkleSpeed + star.seed) * .5 + .5, 2.6) * .62;
+    const approach = THREE.MathUtils.clamp((1 - star.z) / (1 - glitterSettings.focalDepth), 0, 1);
+    const layerFade = .58 + approach * .62 + star.depth * .16;
+    const alpha = Math.min(1, star.alpha * twinkle * layerFade * centerFade * glitterSettings.brightness * audioLift * (flashMult > 1 ? 1.18 : .9));
     const colStr = rgbStrs[star.colorIdx];
+    const size = Math.max(.65, star.size * glitterSettings.starScale * (.55 + approach * 1.75) * star.depth * (flashMult > 1 ? 1.28 : 1));
+    const px = Math.round(sx);
+    const py = Math.round(sy);
 
-    if (!Number.isNaN(star.px) && !Number.isNaN(star.py)) {
-      ctx.globalAlpha = alpha * .04;
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (star.streak > 0 && !Number.isNaN(star.px) && !Number.isNaN(star.py)) {
+      ctx.globalAlpha = alpha * (.32 + approach * .34);
       ctx.strokeStyle = colStr;
-      ctx.lineWidth = Math.max(.2, r * .12);
+      ctx.lineWidth = Math.max(.35, size * (.22 + approach * .18));
       ctx.beginPath();
       ctx.moveTo(star.px, star.py);
-      ctx.lineTo(sx, sy);
+      ctx.lineTo(px, py);
       ctx.stroke();
     }
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = colStr;
-    const size = r * (star.z < .34 ? 1.65 : 1);
-    ctx.fillRect(sx - size, sy - size, size * 2, size * 2);
+    ctx.fillRect(px - size * .5, py - size * .5, size, size);
 
     if (flashMult > 1) {
-      const rf = Math.min(r * 1.25, maxR * 1.25);
-      ctx.globalAlpha = alpha * .18;
-      ctx.fillRect(sx - rf, sy - rf, rf * 2, rf * 2);
+      const flare = size * (2.1 + Math.random() * .6);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = alpha * .3;
+      ctx.fillRect(px - flare * .5, py - size * .25, flare, size * .5);
+      ctx.fillRect(px - size * .25, py - flare * .5, size * .5, flare);
+      ctx.globalAlpha = alpha * .12;
+      ctx.fillRect(px - flare, py - flare, flare * 2, flare * 2);
     }
-
-    star.px = sx;
-    star.py = sy;
   }
 
   ctx.globalAlpha = 1;
@@ -639,18 +657,15 @@ function createCard(song, index, slot) {
 
   const texture = textureLoader.load(assetUrl(song.cover));
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.repeat.x = -1;
-  texture.offset.x = 1;
   const cover = new THREE.Mesh(
     new THREE.PlaneGeometry(1.92, 1.92),
-    new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: .96 })
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 1 })
   );
   cover.position.z = .018;
   cover.userData.card = group;
   group.userData.cover = cover;
   group.userData.halo = halo;
-  group.userData.baseOpacity = slot.layer === 'primary' ? .98 : slot.layer === 'secondary' ? .78 : .52;
+  group.userData.baseOpacity = 1;
   cover.material.opacity = group.userData.baseOpacity;
   group.add(cover);
 
@@ -860,8 +875,9 @@ function updateCards(elapsed, now) {
     targetCardPosition.copy(card.userData.basePosition).multiplyScalar(1 - viewFocus * .055);
     targetCardPosition.y += Math.sin(elapsed * .55 + card.userData.phase) * .13;
     card.position.lerp(targetCardPosition, .065);
-    card.userData.cover.material.opacity = THREE.MathUtils.lerp(card.userData.baseOpacity, .98, viewFocus);
-    card.rotation.z = card.userData.baseTilt + Math.sin(elapsed * .35 + card.userData.phase) * .025;
+    card.userData.cover.material.opacity = 1;
+    card.quaternion.copy(camera.quaternion);
+    card.rotateZ(card.userData.baseTilt + Math.sin(elapsed * .35 + card.userData.phase) * .025);
   });
 }
 
