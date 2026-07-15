@@ -28,6 +28,47 @@ const songs = [
   { id: 23, album: 'Ruby', title: 'Intro: JANE with FKJ', artist: 'JENNIE & FKJ', genre: 'Pop', cover: '/covers/24-ruby.jpg', accent: '#ec4f65', rgb: '236,79,101', preview: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/a5/eb/fa/a5ebfa19-6417-d65c-14a7-74487c88a342/mzaf_7918904435465310237.plus.aac.p.m4a' },
 ];
 
+const worldProfiles = {
+  0: { era: '2020s', mood: '低频街头感' },
+  1: { era: '2020s', mood: '冷调奢华说唱' },
+  2: { era: '2020s', mood: '高光失恋流行' },
+  3: { era: '2020s', mood: '合成器冲击隧道' },
+  4: { era: '2020s', mood: '深夜 R&B 雾气' },
+  5: { era: '2020s', mood: '温暖木吉他旷野' },
+  6: { era: '复古 80s', mood: '霓虹舞曲脉冲' },
+  7: { era: '2020s', mood: '粗粝陷阱轨道' },
+  8: { era: '2020s', mood: '体育场乡村光晕' },
+  9: { era: '民谣根源', mood: '门廊乡村叙事' },
+  10: { era: '2020s', mood: '未来放克说唱' },
+  11: { era: '2020s', mood: '电影感流行房间' },
+  12: { era: '2020s', mood: '自信俱乐部说唱' },
+  13: { era: '2020s', mood: '午夜说唱休息室' },
+  14: { era: '2020s', mood: '剧场感 K-pop 爆发' },
+  15: { era: '2000s R&B', mood: '丝滑电台律动' },
+  16: { era: '2020s', mood: '柔焦 R&B 告白' },
+  17: { era: '2020s', mood: '粗砺孟菲斯引擎' },
+  18: { era: '黄金年代', mood: '经典说唱传输' },
+  19: { era: '2020s Soul', mood: '丝绒浪漫绽放' },
+  20: { era: '2020s', mood: '明亮 K-pop 友情' },
+  21: { era: '2020s', mood: '华语流行梦境档案' },
+  22: { era: '2010s', mood: '粉彩流行记忆' },
+  23: { era: '2020s', mood: '利落流行灵魂棱镜' },
+};
+
+function fallbackWorldProfile(song) {
+  return { era: '2020s', mood: `${song.genre} 信号` };
+}
+
+songs.forEach((song) => Object.assign(song, worldProfiles[song.id] || fallbackWorldProfile(song)));
+
+function formatWorldLabel(song) {
+  return `流派：${song.genre}｜年代：${song.era}`;
+}
+
+function formatWorldSignal(song) {
+  return `氛围：${song.mood}`;
+}
+
 function assetUrl(path) {
   if (/^https?:\/\//.test(path)) return path;
   return `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
@@ -128,6 +169,8 @@ const targetCardPosition = new THREE.Vector3();
 const targetCardScale = new THREE.Vector3();
 const cards = [];
 const history = [];
+let entryPortal = null;
+let hoveredEntryPortal = false;
 const glitterStars = [];
 const glitterSize = { w: 0, h: 0, dpr: 1 };
 const glitterSettings = {
@@ -235,8 +278,8 @@ let currentSong = songs[0];
 let hoveredCard = null;
 let dwellStarted = 0;
 let transitioning = false;
-let entered = false;
-let isPaused = false;
+let entered = true;
+let isPaused = true;
 let yaw = 0;
 let pitch = 0;
 let targetYaw = 0;
@@ -249,15 +292,15 @@ const MOTION_YAW_SENSITIVITY = .42;
 const MOTION_PITCH_SENSITIVITY = .34;
 const MOTION_SMOOTHING = .12;
 const MOTION_DEADZONE = .018;
+const DWELL_DURATION_MS = 1550;
 let journeyDepth = 1;
 let worldBuiltAt = performance.now();
 let themeInitialized = false;
 
 const ui = {
-  entry: document.querySelector('#entry'),
-  enterButton: document.querySelector('#enterButton'),
   reticle: document.querySelector('#reticle'),
   targetCopy: document.querySelector('#targetCopy'),
+  targetKicker: document.querySelector('#targetKicker'),
   targetTitle: document.querySelector('#targetTitle'),
   targetArtist: document.querySelector('#targetArtist'),
   nowCover: document.querySelector('#nowCover'),
@@ -268,7 +311,6 @@ const ui = {
   motionButton: document.querySelector('#motionButton'),
   journey: document.querySelector('#journey'),
   warp: document.querySelector('#warp'),
-  transitionCopy: document.querySelector('#transitionCopy'),
   hint: document.querySelector('#hint'),
 };
 
@@ -624,6 +666,127 @@ function buildAtmosphere() {
   }
 }
 
+function createAlienatedCoverMaterial(texture, song) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uMap: { value: texture },
+      uTime: { value: 0 },
+      uAccent: { value: new THREE.Color(song.accent) },
+      uOpacity: { value: .66 },
+    },
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        vec3 pos = position;
+        pos.x += sin(pos.y * 8.0 + uTime * 1.6) * 0.035;
+        pos.z += sin((pos.y + pos.x) * 12.0 + uTime * 2.0) * 0.045;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+
+      uniform sampler2D uMap;
+      uniform float uTime;
+      uniform vec3 uAccent;
+      uniform float uOpacity;
+      varying vec2 vUv;
+
+      void main() {
+        vec2 uv = vUv;
+        float ripple = sin(uv.y * 18.0 + uTime * 1.7) * 0.014 + sin(uv.y * 52.0 - uTime * 3.1) * 0.004;
+        uv.x += ripple;
+
+        vec2 center = vUv - 0.5;
+        float edge = 1.0 - smoothstep(0.42, 0.72, length(center));
+        float scan = 0.78 + sin(vUv.y * 210.0 + uTime * 8.0) * 0.14;
+        float tear = step(0.986, fract(sin(floor(vUv.y * 34.0) * 91.23 + uTime * 1.7) * 43758.5453));
+        float channelShift = 0.008 + sin(uTime * 1.2) * 0.003 + tear * 0.018;
+
+        float r = texture2D(uMap, uv + vec2(channelShift, 0.0)).r;
+        float g = texture2D(uMap, uv).g;
+        float b = texture2D(uMap, uv - vec2(channelShift, 0.0)).b;
+        vec3 cover = vec3(r, g, b);
+        vec3 color = mix(cover, uAccent, 0.28);
+        color += uAccent * (0.12 + tear * 0.32);
+
+        float alpha = uOpacity * edge * scan * (0.78 + tear * 0.22);
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+}
+
+function disposeObject(object) {
+  object.traverse((child) => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((material) => {
+        if (material.map) material.map.dispose();
+        if (material.uniforms?.uMap?.value) material.uniforms.uMap.value.dispose();
+        material.dispose();
+      });
+    }
+  });
+}
+
+function clearEntryPortal() {
+  if (!entryPortal) return;
+  root.remove(entryPortal);
+  disposeObject(entryPortal);
+  entryPortal = null;
+}
+
+function buildEntryPortal(song) {
+  clearEntryPortal();
+  const group = new THREE.Group();
+  group.name = 'entryPortal';
+  group.position.set(0, .32, 8.8);
+  group.lookAt(0, 0, 0);
+  group.userData.song = song;
+  group.userData.baseScale = .88;
+  group.userData.phase = Math.random() * 6;
+
+  const texture = textureLoader.load(assetUrl(song.cover));
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const cover = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.35, 2.35, 28, 28),
+    createAlienatedCoverMaterial(texture, song)
+  );
+  cover.position.z = .025;
+  cover.userData.entryPortal = group;
+  group.userData.cover = cover;
+  group.add(cover);
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(1.52, 1.56, 96),
+    new THREE.MeshBasicMaterial({ color: song.accent, transparent: true, opacity: .58, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+  );
+  ring.position.z = .01;
+  group.userData.ring = ring;
+  group.add(ring);
+
+  const echo = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.95, 2.95),
+    new THREE.MeshBasicMaterial({ color: song.accent, transparent: true, opacity: .18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+  );
+  echo.position.z = -.035;
+  group.userData.echo = echo;
+  group.add(echo);
+
+  group.scale.setScalar(group.userData.baseScale);
+  entryPortal = group;
+  root.add(group);
+}
+
 function createCard(song, index, slot) {
   const group = new THREE.Group();
   const azimuth = THREE.MathUtils.degToRad(slot.azimuth);
@@ -703,8 +866,10 @@ function clearCards() {
   cards.length = 0;
 }
 
-function buildWorld(song) {
+function buildWorld(song, entranceSong = null) {
   clearCards();
+  if (entranceSong) buildEntryPortal(entranceSong);
+  else clearEntryPortal();
   worldBuiltAt = performance.now();
   const related = getRelatedSongs(song);
   const slots = createConstellationSlots(song.id);
@@ -712,7 +877,7 @@ function buildWorld(song) {
   hoveredCard = null;
   dwellStarted = 0;
   document.documentElement.style.setProperty('--dwell', 0);
-  ui.targetCopy.classList.remove('visible');
+  if (!transitioning) ui.targetCopy.classList.remove('visible', 'traveling');
 }
 
 function colorToRgbString(color) {
@@ -760,8 +925,8 @@ function applyTheme(song) {
 function updateNowPlaying(song) {
   ui.nowCover.src = assetUrl(song.cover);
   ui.nowTitle.textContent = song.title;
-  ui.nowArtist.textContent = `${song.artist} · ${song.genre}`;
-  ui.journey.textContent = `WORLD ${String(journeyDepth).padStart(2, '0')} · ${song.genre.toUpperCase()}`;
+  ui.nowArtist.textContent = `${song.artist} · ${song.genre} · ${song.era}`;
+  ui.journey.textContent = `世界 ${String(journeyDepth).padStart(2, '0')}｜${formatWorldLabel(song)}`;
   ui.backButton.disabled = history.length === 0;
 }
 
@@ -791,14 +956,21 @@ function playPreview(song, immediate = false) {
   fade();
 }
 
-function travelTo(song, fromHistory = false) {
+function updateAudioUi() {
+  ui.pauseButton.textContent = isPaused ? '▶' : 'Ⅱ';
+  ui.pauseButton.setAttribute('aria-label', isPaused ? '播放试听' : '暂停试听');
+  document.querySelector('.playing-bars').style.display = isPaused ? 'none' : 'flex';
+}
+
+function travelTo(song, fromHistory = false, entranceSongOverride = undefined) {
   if (transitioning || song.id === currentSong.id) return;
   transitioning = true;
+  const entranceSong = entranceSongOverride === undefined ? currentSong : entranceSongOverride;
   if (!fromHistory) history.push(currentSong);
-  ui.transitionCopy.querySelector('strong').textContent = song.title;
-  ui.transitionCopy.classList.remove('visible');
-  void ui.transitionCopy.offsetWidth;
-  ui.transitionCopy.classList.add('visible');
+  ui.targetKicker.textContent = '正在进入';
+  ui.targetTitle.textContent = song.title;
+  ui.targetArtist.textContent = `${formatWorldLabel(song)}｜${formatWorldSignal(song)}`;
+  ui.targetCopy.classList.add('visible', 'traveling');
   ui.warp.classList.remove('active');
   void ui.warp.offsetWidth;
   ui.warp.classList.add('active');
@@ -811,18 +983,31 @@ function travelTo(song, fromHistory = false) {
     journeyDepth = Math.max(1, fromHistory ? journeyDepth - 1 : journeyDepth + 1);
     applyTheme(song);
     updateNowPlaying(song);
-    buildWorld(song);
-    playPreview(song);
+    buildWorld(song, entranceSong);
+    if (isPaused) {
+      activeAudio.src = song.preview;
+      activeAudio.currentTime = 0;
+    } else {
+      playPreview(song);
+    }
   }, 650);
   setTimeout(() => {
     transitioning = false;
-    ui.transitionCopy.classList.remove('visible');
+    ui.targetCopy.classList.remove('visible', 'traveling');
   }, 1500);
+}
+
+function returnToPreviousWorld() {
+  if (transitioning) return;
+  const previous = history.pop();
+  const entranceSong = history[history.length - 1] || null;
+  if (previous) travelTo(previous, true, entranceSong);
 }
 
 function setHover(card, now) {
   if (card !== hoveredCard) {
     hoveredCard = card;
+    hoveredEntryPortal = false;
     dwellStarted = now;
     document.documentElement.style.setProperty('--dwell', 0);
   }
@@ -837,20 +1022,60 @@ function setHover(card, now) {
     return;
   }
   const song = card.userData.song;
+  ui.targetKicker.textContent = formatWorldLabel(song);
   ui.targetTitle.textContent = song.title;
-  ui.targetArtist.textContent = `${song.artist} · Hold to enter`;
+  ui.targetArtist.textContent = `${song.artist}｜${formatWorldSignal(song)}｜停留进入`;
   ui.targetCopy.classList.add('visible');
   ui.reticle.classList.add('locked');
-  const progress = Math.min(1, (now - dwellStarted) / 1050);
+  const progress = Math.min(1, (now - dwellStarted) / DWELL_DURATION_MS);
   document.documentElement.style.setProperty('--dwell', progress.toFixed(3));
   if (progress >= 1) travelTo(song);
+}
+
+function setEntryPortalHover(portal, now) {
+  if (!portal || history.length === 0) {
+    hoveredEntryPortal = false;
+    setHover(null, now);
+    return;
+  }
+  if (!hoveredEntryPortal) {
+    hoveredEntryPortal = true;
+    hoveredCard = null;
+    dwellStarted = now;
+    document.documentElement.style.setProperty('--dwell', 0);
+  }
+  cards.forEach((item) => {
+    item.userData.isHovered = false;
+    item.userData.halo.material.opacity = .09;
+  });
+  const song = portal.userData.song;
+  ui.targetKicker.textContent = '返回入口';
+  ui.targetTitle.textContent = song.title;
+  ui.targetArtist.textContent = `${song.artist}｜停留返回上一世界`;
+  ui.targetCopy.classList.add('visible');
+  ui.reticle.classList.add('locked');
+  const progress = Math.min(1, (now - dwellStarted) / DWELL_DURATION_MS);
+  document.documentElement.style.setProperty('--dwell', progress.toFixed(3));
+  if (progress >= 1) returnToPreviousWorld();
 }
 
 function updateInteraction(now) {
   if (!entered || transitioning) return;
   raycaster.setFromCamera(center, camera);
-  const hits = raycaster.intersectObjects(cards.map((card) => card.userData.cover), false);
-  setHover(hits.length ? hits[0].object.userData.card : null, now);
+  const hitTargets = cards.map((card) => card.userData.cover);
+  if (entryPortal?.userData.cover && history.length > 0) hitTargets.push(entryPortal.userData.cover);
+  const hits = raycaster.intersectObjects(hitTargets, false);
+  if (!hits.length) {
+    hoveredEntryPortal = false;
+    setHover(null, now);
+    return;
+  }
+  const hitObject = hits[0].object;
+  if (hitObject.userData.entryPortal) {
+    setEntryPortalHover(hitObject.userData.entryPortal, now);
+  } else {
+    setHover(hitObject.userData.card, now);
+  }
 }
 
 function updateCards(elapsed, now) {
@@ -879,6 +1104,25 @@ function updateCards(elapsed, now) {
     card.quaternion.copy(camera.quaternion);
     card.rotateZ(card.userData.baseTilt + Math.sin(elapsed * .35 + card.userData.phase) * .025);
   });
+}
+
+function updateEntryPortal(elapsed) {
+  if (!entryPortal) return;
+  const pulse = 1 + Math.sin(elapsed * .9 + entryPortal.userData.phase) * .035;
+  entryPortal.scale.setScalar(entryPortal.userData.baseScale * pulse);
+  entryPortal.quaternion.copy(camera.quaternion);
+  entryPortal.rotateZ(Math.sin(elapsed * .32 + entryPortal.userData.phase) * .055);
+  if (entryPortal.userData.cover?.material?.uniforms) {
+    entryPortal.userData.cover.material.uniforms.uTime.value = elapsed;
+    entryPortal.userData.cover.material.uniforms.uOpacity.value = .6 + Math.sin(elapsed * 1.4) * .08;
+  }
+  if (entryPortal.userData.ring) {
+    entryPortal.userData.ring.rotation.z += .006;
+    entryPortal.userData.ring.material.opacity = .45 + Math.sin(elapsed * 1.1) * .13;
+  }
+  if (entryPortal.userData.echo) {
+    entryPortal.userData.echo.material.opacity = .13 + Math.sin(elapsed * .7) * .05;
+  }
 }
 
 function onPointerDown(event) {
@@ -948,33 +1192,30 @@ async function enableMotion() {
     deviceMotion = !deviceMotion;
     motionBaseline = null;
     ui.motionButton.classList.toggle('active', deviceMotion);
-    ui.motionButton.querySelector('.motion-label').textContent = deviceMotion ? 'STEADY' : 'MOTION';
+    ui.motionButton.querySelector('.motion-label').textContent = deviceMotion ? '体感中' : '体感';
   } catch {
     deviceMotion = false;
     motionBaseline = null;
   }
 }
 
-ui.enterButton.addEventListener('click', async () => {
-  entered = true;
-  ui.entry.classList.add('hidden');
-  buildWorld(currentSong);
-  applyTheme(currentSong);
-  updateNowPlaying(currentSong);
-  playPreview(currentSong, true);
-  setTimeout(() => ui.hint.style.opacity = '.12', 4500);
-});
-
 ui.motionButton.addEventListener('click', enableMotion);
 ui.pauseButton.addEventListener('click', () => {
   isPaused = !isPaused;
-  if (isPaused) activeAudio.pause(); else activeAudio.play().catch(() => {});
-  ui.pauseButton.textContent = isPaused ? '▶' : 'Ⅱ';
-  document.querySelector('.playing-bars').style.display = isPaused ? 'none' : 'flex';
+  if (isPaused) {
+    activeAudio.pause();
+  } else {
+    if (!activeAudio.src) activeAudio.src = currentSong.preview;
+    activeAudio.volume = .72;
+    activeAudio.play().catch(() => {
+      isPaused = true;
+      updateAudioUi();
+    });
+  }
+  updateAudioUi();
 });
 ui.backButton.addEventListener('click', () => {
-  const previous = history.pop();
-  if (previous) travelTo(previous, true);
+  returnToPreviousWorld();
 });
 
 canvas.addEventListener('pointerdown', onPointerDown);
@@ -994,12 +1235,17 @@ window.addEventListener('blur', () => { pointerDown = false; });
 
 renderer.domElement.addEventListener('webglcontextlost', (event) => {
   event.preventDefault();
-  ui.hint.textContent = 'VISUAL SIGNAL LOST · RELOAD TO RECONNECT';
+  ui.hint.textContent = '视觉信号中断，请刷新页面重新连接';
 });
 
 buildAtmosphere();
 buildWorld(currentSong);
 applyTheme(currentSong);
+updateNowPlaying(currentSong);
+activeAudio.src = currentSong.preview;
+activeAudio.volume = .72;
+updateAudioUi();
+setTimeout(() => ui.hint.style.opacity = '.22', 4500);
 
 renderer.setAnimationLoop((time) => {
   const delta = clock.getDelta();
@@ -1014,6 +1260,7 @@ renderer.setAnimationLoop((time) => {
   auroraUniforms.uTime.value = elapsed;
   auroraUniforms.uAmplitude.value = 1.0 + Math.sin(elapsed * .18) * .08;
   auroraCurrentStops.forEach((color, index) => color.lerp(auroraTargetStops[index], .035));
+  updateEntryPortal(elapsed);
   updateCards(elapsed, time);
   updateInteraction(time);
   renderer.clear();
